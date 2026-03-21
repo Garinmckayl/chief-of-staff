@@ -1,0 +1,29 @@
+{
+  "name": "Chief of Staff",
+  "image": "mcr.microsoft.com/devcontainers/typescript-node:22",
+  "forwardPorts": [3333],
+  "portsAttributes": {
+    "3333": {
+      "label": "Chief of Staff MCP",
+      "onAutoForward": "notify",
+      "visibility": "public"
+    }
+  },
+  "postCreateCommand": "npm install && npm run build",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "GitHub.copilot",
+        "GitHub.copilot-chat"
+      ],
+      "mcp": {
+        "servers": {
+          "chief-of-staff": {
+            "type": "http",
+            "url": "http://localhost:3333/mcp"
+          }
+        }
+      }
+    }
+  }
+}
