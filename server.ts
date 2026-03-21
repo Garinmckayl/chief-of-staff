@@ -1,26 +1,23 @@
 /**
  * Chief of Staff — MCP Server
  *
- * Registers a Notion-powered morning briefing tool that renders an interactive
- * dashboard inside Claude, ChatGPT, Cursor, and any MCP Apps-capable host.
+ * An MCP App that turns your Notion workspace into a live, interactive
+ * morning briefing inside Claude — with agentic actions that actually
+ * execute real work back into Notion.
+ *
+ * Tools registered:
+ *   chief_of_staff_briefing    — renders the interactive dashboard (MCP App)
+ *   get_notion_briefing_data   — fetches live Notion workspace snapshot
+ *   complete_notion_task       — marks a single task done
+ *   create_notion_tasks        — Claude generates tasks and writes them to Notion
+ *   reschedule_overdue_tasks   — rewrites due dates on overdue tasks
+ *   write_weekly_review        — creates a rich weekly review page in Notion
+ *   break_down_goal            — breaks a stalled goal into sub-tasks in Notion
  *
  * Usage:
  *   npm run build               # Build the iframe HTML
  *   npm run start:stdio         # Run via stdio (Claude Desktop, Cursor)
- *   npm run start               # Run via HTTP (web clients)
- *
- * Add to Claude Desktop (~/.config/Claude/claude_desktop_config.json):
- *   {
- *     "mcpServers": {
- *       "chief-of-staff": {
- *         "command": "node",
- *         "args": ["--import", "tsx/esm", "/path/to/chief-of-staff/server.ts", "--stdio"],
- *         "env": {
- *           "NOTION_API_KEY": "ntn_your_key_here"
- *         }
- *       }
- *     }
- *   }
+ *   npm run start               # Run via HTTP (web clients, Codespaces)
  */
 
 import { createMcpApp } from "@json-render/mcp";
@@ -32,25 +29,40 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { catalog } from "./src/catalog.js";
-import { fetchWorkspaceSnapshot, completeTask } from "./src/notion.js";
+import {
+  fetchWorkspaceSnapshot,
+  fetchCompletedTasks,
+  completeTask,
+  createTasks,
+  rescheduleTasks,
+  createWeeklyReview,
+  breakDownGoal,
+} from "./src/notion.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 function loadHtml(): string {
   const htmlPath = path.join(__dirname, "dist", "index.html");
   if (!fs.existsSync(htmlPath)) {
-    throw new Error(
-      `Built HTML not found at ${htmlPath}. Run 'npm run build' first.`
-    );
+    throw new Error(`Built HTML not found at ${htmlPath}. Run 'npm run build' first.`);
   }
   return fs.readFileSync(htmlPath, "utf-8");
 }
 
+// ─── Task schema (reused across tools) ───────────────────────────────────────
+
+const TaskSchema = z.object({
+  title: z.string().describe("Task title"),
+  dueDate: z.string().optional().describe("ISO date e.g. '2026-03-28'"),
+  priority: z.enum(["urgent", "high", "normal", "low"]).optional(),
+  notes: z.string().optional().describe("Optional body content for the task page"),
+});
+
+// ─── Server factory ───────────────────────────────────────────────────────────
+
 async function createServer() {
   const html = loadHtml();
 
-  // Create the base MCP app with the json-render catalog
-  // This registers the render-ui tool whose description IS the catalog prompt
   const server = await createMcpApp({
     name: "Chief of Staff",
     version: "1.0.0",
@@ -64,83 +76,221 @@ Render an interactive morning briefing dashboard from the user's Notion workspac
 
 ${catalog.prompt({
   customRules: [
-    "Always start with exactly one FocusCard at the top — the single most important thing right now.",
-    "Use SectionHeader to divide sections: Tasks, Goals, Insights.",
-    "Overdue tasks MUST appear first in a red-themed TaskList.",
-    "For each task, set isOverdue=true if the task is past due.",
-    "Include 1-3 InsightBadge components with short observations about patterns (e.g. 'You have 3 overdue items this week').",
-    "GoalProgress bars show progress 0-100. If progress data is unavailable, omit the Goals section.",
-    "Keep the briefing scannable — prioritize ruthlessly. If there are 10 tasks, surface the 3 most critical.",
-    "The tone is calm, direct, and supportive — like a trusted chief of staff, not a task master.",
-    "Always include a QuickAction button to open the full Notion workspace.",
+    "Always start with exactly one FocusCard — the single most important thing right now.",
+    "Use SectionHeader to divide: Focus, Tasks, Goals, Take Action.",
+    "Overdue tasks MUST appear first in a red-themed TaskList with isOverdue=true.",
+    "Include 1-3 InsightBadge components with sharp observations.",
+    "GoalProgress bars show progress 0-100. Omit Goals section if no data.",
+    "Keep it scannable — surface the 3 most critical tasks if there are many.",
+    "Tone: calm, direct, like a trusted chief of staff.",
+    "ALWAYS include a 'Take Action' SectionHeader at the bottom followed by 2-3 AgentAction buttons.",
+    "AgentAction buttons should reflect what actually needs doing. Examples:",
+    "  - If there are overdue tasks: AgentAction with agentTool='reschedule_overdue_tasks', label='Reschedule overdue tasks', emoji='📅'",
+    "  - If it's Friday or there are many done tasks: AgentAction with agentTool='write_weekly_review', label='Write weekly review', emoji='📋'",
+    "  - If a goal has no tasks: AgentAction with agentTool='break_down_goal', label='Break down stalled goal', emoji='🎯'",
+    "  - Always include: AgentAction with agentTool='create_notion_tasks', label='Plan my week', emoji='⚡', variant='primary'",
+    "When the user clicks an AgentAction button, it sends a run_agent action — Claude will then call the appropriate MCP tool to do the real work in Notion.",
   ],
 })}
 
-Context: you will receive the user's Notion workspace data as JSON in your prompt. Use it to populate the dashboard.
+Context: you will receive the user's Notion workspace snapshot as JSON. Use it to populate the dashboard with real data.
 `.trim(),
     },
   });
 
-  // Register additional tools for task actions
   const mcpServer = server as unknown as McpServer;
 
-  // Tool: fetch the morning briefing data
+  // ── Tool: fetch briefing data ───────────────────────────────────────────────
   mcpServer.tool(
     "get_notion_briefing_data",
     "Fetch live data from the user's Notion workspace to populate the Chief of Staff briefing",
     {},
     async () => {
       if (!process.env.NOTION_API_KEY) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify({
-                error: "NOTION_API_KEY not set. Please add it to your MCP server environment.",
-              }),
-            },
-          ],
-        };
+        return { content: [{ type: "text" as const, text: JSON.stringify({ error: "NOTION_API_KEY not set" }) }] };
       }
-
       try {
         const snapshot = await fetchWorkspaceSnapshot();
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(snapshot, null, 2),
-            },
-          ],
-        };
+        return { content: [{ type: "text" as const, text: JSON.stringify(snapshot, null, 2) }] };
       } catch (err: any) {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify({ error: err.message }),
-            },
-          ],
-        };
+        return { content: [{ type: "text" as const, text: JSON.stringify({ error: err.message }) }] };
       }
     }
   );
 
-  // Tool: complete a task in Notion
+  // ── Tool: complete a task ───────────────────────────────────────────────────
   mcpServer.tool(
     "complete_notion_task",
     "Mark a Notion task as complete",
-    { taskId: z.string().describe("The Notion page ID of the task to complete") },
+    { taskId: z.string().describe("Notion page ID") },
     async ({ taskId }) => {
       try {
         await completeTask(taskId);
+        return { content: [{ type: "text" as const, text: JSON.stringify({ success: true, taskId }) }] };
+      } catch (err: any) {
+        return { content: [{ type: "text" as const, text: JSON.stringify({ error: err.message }) }] };
+      }
+    }
+  );
+
+  // ── Tool: create tasks ──────────────────────────────────────────────────────
+  mcpServer.tool(
+    "create_notion_tasks",
+    `Create one or more tasks directly in the user's Notion task database.
+Use this when the user asks you to plan their week, create a project plan, or break work into tasks.
+You decide the task titles, due dates, and priorities based on the conversation context.
+Always create meaningful, specific tasks — not vague placeholders.`,
+    {
+      tasks: z.array(TaskSchema).describe("The tasks to create"),
+      planTitle: z.string().optional().describe("Optional name for this batch of tasks e.g. 'Launch plan for v2'"),
+    },
+    async ({ tasks, planTitle }) => {
+      try {
+        const created = await createTasks(tasks);
         return {
-          content: [{ type: "text" as const, text: JSON.stringify({ success: true, taskId }) }],
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              success: true,
+              planTitle,
+              created,
+              message: `Created ${created.length} task${created.length !== 1 ? "s" : ""} in Notion.`,
+            }),
+          }],
         };
       } catch (err: any) {
+        return { content: [{ type: "text" as const, text: JSON.stringify({ error: err.message }) }] };
+      }
+    }
+  );
+
+  // ── Tool: reschedule overdue tasks ──────────────────────────────────────────
+  mcpServer.tool(
+    "reschedule_overdue_tasks",
+    `Reschedule overdue tasks by updating their due dates in Notion.
+First call get_notion_briefing_data to get the current overdue tasks.
+Then decide sensible new due dates based on priority and today's date.
+Spread them out — don't dump everything on one day.
+Urgent tasks get the earliest dates. Low priority items can slide further.`,
+    {
+      updates: z.array(z.object({
+        taskId: z.string().describe("Notion page ID of the task"),
+        newDueDate: z.string().describe("New ISO due date e.g. '2026-03-26'"),
+        reason: z.string().describe("Why you picked this date"),
+      })).describe("Tasks to reschedule with their new due dates"),
+    },
+    async ({ updates }) => {
+      try {
+        const results = await rescheduleTasks(updates);
+        const succeeded = results.filter((r) => r.success).length;
         return {
-          content: [{ type: "text" as const, text: JSON.stringify({ error: err.message }) }],
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              success: true,
+              rescheduled: succeeded,
+              total: updates.length,
+              results,
+              message: `Rescheduled ${succeeded}/${updates.length} overdue tasks in Notion.`,
+            }),
+          }],
         };
+      } catch (err: any) {
+        return { content: [{ type: "text" as const, text: JSON.stringify({ error: err.message }) }] };
+      }
+    }
+  );
+
+  // ── Tool: write weekly review ───────────────────────────────────────────────
+  mcpServer.tool(
+    "write_weekly_review",
+    `Generate a weekly review and write it as a rich page in Notion.
+First call get_notion_briefing_data to get context.
+Then fetch completed tasks and synthesize:
+- What got done (wins)
+- What slipped and why
+- What carries to next week
+- A short honest reflection
+
+Write it like a real chief of staff would brief a founder — direct, no fluff.`,
+    {
+      weekOf: z.string().describe("Week date e.g. 'March 17–21, 2026'"),
+      wins: z.array(z.string()).describe("Things that were completed or went well"),
+      slipped: z.array(z.string()).describe("Things that were supposed to happen but didn't"),
+      carries: z.array(z.string()).describe("Priorities carrying into next week"),
+      reflection: z.string().describe("2-3 sentence honest reflection on the week"),
+      completedTaskIds: z.array(z.string()).optional().describe("Notion page IDs of completed tasks"),
+    },
+    async ({ weekOf, wins, slipped, carries, reflection, completedTaskIds }) => {
+      try {
+        const url = await createWeeklyReview({
+          weekOf,
+          wins,
+          slipped,
+          carries,
+          reflection,
+          completedTaskIds: completedTaskIds ?? [],
+        });
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              success: true,
+              url,
+              message: `Weekly review created in Notion: ${url}`,
+            }),
+          }],
+        };
+      } catch (err: any) {
+        return { content: [{ type: "text" as const, text: JSON.stringify({ error: err.message }) }] };
+      }
+    }
+  );
+
+  // ── Tool: break down goal ───────────────────────────────────────────────────
+  mcpServer.tool(
+    "break_down_goal",
+    `Break a stalled or vague goal into concrete sub-tasks and create them in Notion.
+Use this when the user has a goal with no progress or no attached tasks.
+Generate 3-6 specific, actionable sub-tasks that would meaningfully move the goal forward.
+Each task should be completable in 1-2 days max.
+Set realistic due dates spread over the next 2 weeks.`,
+    {
+      goalTitle: z.string().describe("The goal being broken down"),
+      goalContext: z.string().optional().describe("Any additional context about the goal"),
+      subtasks: z.array(TaskSchema).describe("The concrete sub-tasks to create in Notion"),
+    },
+    async ({ goalTitle, subtasks }) => {
+      try {
+        const created = await breakDownGoal(goalTitle, subtasks);
+        return {
+          content: [{
+            type: "text" as const,
+            text: JSON.stringify({
+              success: true,
+              goalTitle,
+              created,
+              message: `Created ${created.length} sub-tasks for "${goalTitle}" in Notion.`,
+            }),
+          }],
+        };
+      } catch (err: any) {
+        return { content: [{ type: "text" as const, text: JSON.stringify({ error: err.message }) }] };
+      }
+    }
+  );
+
+  // ── Tool: fetch completed tasks (used by weekly review) ────────────────────
+  mcpServer.tool(
+    "get_completed_tasks",
+    "Fetch tasks completed in the past N days from Notion — used to populate the weekly review",
+    { days: z.number().optional().describe("How many days back to look (default 7)") },
+    async ({ days }) => {
+      try {
+        const tasks = await fetchCompletedTasks(days ?? 7);
+        return { content: [{ type: "text" as const, text: JSON.stringify(tasks, null, 2) }] };
+      } catch (err: any) {
+        return { content: [{ type: "text" as const, text: JSON.stringify({ error: err.message }) }] };
       }
     }
   );
@@ -164,12 +314,7 @@ async function startHttp() {
   app.all("/mcp", async (req: any, res: any) => {
     const server = await createServer();
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
-
-    res.on("close", () => {
-      transport.close().catch(() => {});
-      server.close().catch(() => {});
-    });
-
+    res.on("close", () => { transport.close().catch(() => {}); server.close().catch(() => {}); });
     try {
       await server.connect(transport);
       await transport.handleRequest(req, res, req.body);

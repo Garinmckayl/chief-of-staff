@@ -114,6 +114,28 @@ export const catalog = defineCatalog(schema, {
       }),
       description: "A clickable action button. Use for quick one-click actions.",
     },
+
+    /**
+     * AgentAction: A prominent CTA button that triggers an agentic workflow.
+     * Displayed at the bottom of the briefing as the "what should I do next" options.
+     * Each button tells Claude to call a specific agentic MCP tool.
+     */
+    AgentAction: {
+      props: z.object({
+        label: z.string().describe("Button label, e.g. 'Clear my week' or 'Write weekly review'"),
+        description: z.string().describe("One-line description of what the agent will do"),
+        agentTool: z.enum([
+          "create_notion_tasks",
+          "reschedule_overdue_tasks",
+          "write_weekly_review",
+          "break_down_goal",
+        ]).describe("The MCP tool Claude should call when this button is clicked"),
+        emoji: z.string().nullable(),
+        variant: z.enum(["primary", "secondary"]).nullable(),
+      }),
+      description:
+        "A prominent agent action button. Always include 2-3 at the bottom of every briefing under a 'What should I do?' section. Each triggers Claude to run a real Notion agentic workflow.",
+    },
   },
 
   actions: {
@@ -135,6 +157,18 @@ export const catalog = defineCatalog(schema, {
         url: z.string().describe("Notion page URL"),
       }),
       description: "Open a Notion page",
+    },
+
+    /**
+     * Trigger an agentic workflow — tells Claude to call the specified MCP tool.
+     * The UI sends this action; Claude picks it up and executes the real work.
+     */
+    run_agent: {
+      params: z.object({
+        tool: z.string().describe("The MCP tool name to invoke"),
+        context: z.string().nullable().describe("Optional context passed to the agent"),
+      }),
+      description: "Trigger a Notion agentic workflow from the dashboard",
     },
   },
 });

@@ -249,3 +249,282 @@ export async function completeTask(taskId: string): Promise<void> {
     }
   }
 }
+
+// ─── Agentic write operations ─────────────────────────────────────────────────
+
+export interface NewTask {
+  title: string;
+  dueDate?: string;   // ISO date e.g. "2026-03-25"
+  priority?: string;  // "urgent" | "high" | "normal" | "low"
+  notes?: string;
+}
+
+export interface CreatedTask {
+  id: string;
+  title: string;
+  url: string;
+}
+
+/**
+ * Create multiple tasks in the first available task database.
+ * Returns the created pages so the dashboard can render them immediately.
+ */
+export async function createTasks(tasks: NewTask[]): Promise<CreatedTask[]> {
+  // Find the best task database to write into
+  const searchData = await notionFetch("/search", {
+    filter: { property: "object", value: "database" },
+    page_size: 20,
+  });
+
+  let targetDb: { id: string; props: Record<string, any> } | null = null;
+
+  for (const db of searchData.results ?? []) {
+    const props = db.properties ?? {};
+    const propNames = Object.keys(props).map((k: string) => k.toLowerCase());
+    const hasStatus = propNames.some((p) => p === "status" || p.includes("status"));
+    const hasDue = propNames.some((p) => p.includes("due") || p.includes("date"));
+    if (hasStatus || hasDue) {
+      targetDb = { id: db.id, props };
+      break;
+    }
+  }
+
+  if (!targetDb) throw new Error("No task database found in your Notion workspace.");
+
+  const dbProps = targetDb.props;
+  const created: CreatedTask[] = [];
+
+  for (const task of tasks) {
+    // Build properties that match what actually exists in this database
+    const properties: Record<string, any> = {};
+
+    // Title (always present)
+    const titleKey = Object.keys(dbProps).find((k) => dbProps[k].type === "title") ?? "Name";
+    properties[titleKey] = { title: [{ text: { content: task.title } }] };
+
+    // Status
+    const statusKey = Object.keys(dbProps).find((k) => dbProps[k].type === "status");
+    if (statusKey) {
+      properties[statusKey] = { status: { name: "In Progress" } };
+    }
+
+    // Due date
+    if (task.dueDate) {
+      const dateKey = Object.keys(dbProps).find((k) => {
+        const kl = k.toLowerCase();
+        return dbProps[k].type === "date" && (kl.includes("due") || kl.includes("date") || kl.includes("deadline"));
+      });
+      if (dateKey) {
+        properties[dateKey] = { date: { start: task.dueDate } };
+      }
+    }
+
+    // Priority
+    if (task.priority) {
+      const priorityKey = Object.keys(dbProps).find((k) =>
+        k.toLowerCase().includes("priority") && (dbProps[k].type === "select" || dbProps[k].type === "status")
+      );
+      if (priorityKey && dbProps[priorityKey].type === "select") {
+        properties[priorityKey] = { select: { name: task.priority.charAt(0).toUpperCase() + task.priority.slice(1) } };
+      }
+    }
+
+    const children: any[] = [];
+    if (task.notes) {
+      children.push({
+        object: "block",
+        type: "paragraph",
+        paragraph: { rich_text: [{ type: "text", text: { content: task.notes } }] },
+      });
+    }
+    children.push({
+      object: "block",
+      type: "callout",
+      callout: {
+        rich_text: [{ type: "text", text: { content: "Created by Chief of Staff agent" } }],
+        icon: { type: "emoji", emoji: "🤖" },
+        color: "gray_background",
+      },
+    });
+
+    const page = await notionFetch("/pages", {
+      parent: { database_id: targetDb.id },
+      properties,
+      children,
+    });
+
+    created.push({ id: page.id, title: task.title, url: page.url });
+  }
+
+  return created;
+}
+
+/**
+ * Reschedule overdue tasks by pushing their due dates forward.
+ * Claude decides the new dates based on priority and workload context.
+ */
+export async function rescheduleTasks(
+  updates: { taskId: string; newDueDate: string; reason: string }[]
+): Promise<{ taskId: string; newDueDate: string; success: boolean }[]> {
+  const results = [];
+
+  for (const update of updates) {
+    try {
+      // First get the page to find the right date property key
+      const page = await notionFetch(`/pages/${update.taskId}`);
+      const props = page.properties ?? {};
+      const dateKey = Object.keys(props).find((k) => {
+        const kl = k.toLowerCase();
+        return props[k].type === "date" && (kl.includes("due") || kl.includes("date") || kl.includes("deadline"));
+      });
+
+      if (!dateKey) {
+        results.push({ taskId: update.taskId, newDueDate: update.newDueDate, success: false });
+        continue;
+      }
+
+      await notionPatch(`/pages/${update.taskId}`, {
+        properties: { [dateKey]: { date: { start: update.newDueDate } } },
+      });
+
+      results.push({ taskId: update.taskId, newDueDate: update.newDueDate, success: true });
+    } catch {
+      results.push({ taskId: update.taskId, newDueDate: update.newDueDate, success: false });
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Fetch tasks completed in the past N days (for weekly review).
+ */
+export async function fetchCompletedTasks(days = 7): Promise<Task[]> {
+  const since = new Date();
+  since.setDate(since.getDate() - days);
+  const sinceStr = since.toISOString().split("T")[0];
+
+  const searchData = await notionFetch("/search", {
+    filter: { property: "object", value: "database" },
+    page_size: 20,
+  });
+
+  const completed: Task[] = [];
+
+  for (const db of (searchData.results ?? []).slice(0, 5)) {
+    const props = db.properties ?? {};
+    const propNames = Object.keys(props).map((k: string) => k.toLowerCase());
+    const title = (db.title as any[])?.[0]?.plain_text || "Untitled";
+    const hasStatus = propNames.some((p) => p === "status" || p.includes("status"));
+    if (!hasStatus) continue;
+
+    try {
+      const data = await notionFetch(`/databases/${db.id}/query`, {
+        page_size: 50,
+        filter: {
+          or: [
+            { property: "Status", status: { equals: "Done" } },
+            { property: "Status", status: { equals: "Complete" } },
+            { property: "Status", status: { equals: "Completed" } },
+          ],
+        },
+      });
+
+      for (const page of data.results ?? []) {
+        const lastEdited = (page.last_edited_time as string)?.split("T")[0];
+        if (lastEdited && lastEdited >= sinceStr) {
+          completed.push(pageToTask(page, title));
+        }
+      }
+    } catch {
+      // Skip databases that don't support this filter
+    }
+  }
+
+  return completed;
+}
+
+/**
+ * Create a weekly review page in Notion.
+ * Returns the URL of the created page.
+ */
+export async function createWeeklyReview(review: {
+  weekOf: string;
+  wins: string[];
+  slipped: string[];
+  carries: string[];
+  reflection: string;
+  completedTaskIds: string[];
+}): Promise<string> {
+  // Find a page to put the review in (workspace root)
+  const blocks: any[] = [
+    {
+      object: "block", type: "callout",
+      callout: {
+        rich_text: [{ type: "text", text: { content: `Week of ${review.weekOf} · Generated by Chief of Staff` } }],
+        icon: { type: "emoji", emoji: "🤖" },
+        color: "blue_background",
+      },
+    },
+    { object: "block", type: "divider", divider: {} },
+    {
+      object: "block", type: "heading_2",
+      heading_2: { rich_text: [{ type: "text", text: { content: "🏆 Wins" } }] },
+    },
+    ...review.wins.map((w) => ({
+      object: "block", type: "bulleted_list_item",
+      bulleted_list_item: { rich_text: [{ type: "text", text: { content: w } }] },
+    })),
+    {
+      object: "block", type: "heading_2",
+      heading_2: { rich_text: [{ type: "text", text: { content: "⚠️ What Slipped" } }] },
+    },
+    ...review.slipped.map((s) => ({
+      object: "block", type: "bulleted_list_item",
+      bulleted_list_item: { rich_text: [{ type: "text", text: { content: s } }] },
+    })),
+    {
+      object: "block", type: "heading_2",
+      heading_2: { rich_text: [{ type: "text", text: { content: "➡️ Carries to Next Week" } }] },
+    },
+    ...review.carries.map((c) => ({
+      object: "block", type: "bulleted_list_item",
+      bulleted_list_item: { rich_text: [{ type: "text", text: { content: c } }] },
+    })),
+    { object: "block", type: "divider", divider: {} },
+    {
+      object: "block", type: "heading_2",
+      heading_2: { rich_text: [{ type: "text", text: { content: "💭 Reflection" } }] },
+    },
+    {
+      object: "block", type: "paragraph",
+      paragraph: { rich_text: [{ type: "text", text: { content: review.reflection } }] },
+    },
+  ];
+
+  // Create as a standalone page (no parent database — goes to workspace)
+  const page = await notionFetch("/pages", {
+    parent: { type: "workspace", workspace: true },
+    icon: { type: "emoji", emoji: "📋" },
+    properties: {
+      title: { title: [{ text: { content: `Weekly Review — ${review.weekOf}` } }] },
+    },
+    children: blocks,
+  });
+
+  return page.url;
+}
+
+/**
+ * Break a goal down into sub-tasks and create them in Notion.
+ */
+export async function breakDownGoal(
+  goalTitle: string,
+  subtasks: NewTask[]
+): Promise<CreatedTask[]> {
+  // Reuse createTasks — same database, same logic
+  return createTasks(subtasks.map((t) => ({
+    ...t,
+    notes: `Subtask of goal: ${goalTitle}${t.notes ? `\n\n${t.notes}` : ""}`,
+  })));
+}

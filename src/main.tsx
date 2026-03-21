@@ -256,6 +256,61 @@ const { registry } = defineRegistry(catalog, {
         {props.label}
       </button>
     ),
+
+    AgentAction: ({ props, emit }: any) => {
+      const [running, setRunning] = useState(false);
+      const [done, setDone] = useState(false);
+
+      const isPrimary = props.variant === "primary";
+
+      return (
+        <button
+          disabled={running || done}
+          onClick={() => {
+            setRunning(true);
+            emit("press", { tool: props.agentTool, context: props.description });
+            // Optimistic: show done after 1.5s (real result comes back via Claude)
+            setTimeout(() => { setRunning(false); setDone(true); }, 1500);
+          }}
+          style={{
+            display: "flex",
+            alignItems: "flex-start",
+            gap: 12,
+            width: "100%",
+            padding: "12px 16px",
+            borderRadius: 10,
+            background: done
+              ? "rgba(34,197,94,0.08)"
+              : isPrimary
+              ? "rgba(99,102,241,0.12)"
+              : "var(--color-background-secondary, #18181b)",
+            border: `1px solid ${done ? "rgba(34,197,94,0.3)" : isPrimary ? "rgba(99,102,241,0.4)" : "var(--color-border, #27272a)"}`,
+            color: "var(--color-text-primary, #fff)",
+            fontSize: 13,
+            cursor: done || running ? "default" : "pointer",
+            fontWeight: 500,
+            textAlign: "left",
+            marginBottom: 8,
+            opacity: running ? 0.7 : 1,
+            transition: "all 0.2s",
+          }}
+        >
+          <span style={{ fontSize: 18, flexShrink: 0 }}>
+            {done ? "✅" : running ? "⏳" : (props.emoji || "⚡")}
+          </span>
+          <div>
+            <p style={{ margin: 0, fontWeight: 600, color: done ? "#4ade80" : isPrimary ? "#a5b4fc" : "var(--color-text-primary, #fff)" }}>
+              {done ? "Done — check Notion" : running ? "Working…" : props.label}
+            </p>
+            {!done && !running && (
+              <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--color-text-secondary, #a1a1aa)", fontWeight: 400 }}>
+                {props.description}
+              </p>
+            )}
+          </div>
+        </button>
+      );
+    },
   },
   actions: {
     complete_task: async (params) => {
@@ -263,6 +318,11 @@ const { registry } = defineRegistry(catalog, {
     },
     open_notion: async (params) => {
       if (params?.url) window.open(params.url, "_blank", "noopener");
+    },
+    run_agent: async (params) => {
+      // This action fires when an AgentAction button is clicked.
+      // The host (Claude) sees this event and calls the appropriate MCP tool.
+      console.log("run_agent", params?.tool, params?.context);
     },
   },
 });
