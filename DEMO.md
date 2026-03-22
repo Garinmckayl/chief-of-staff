@@ -201,3 +201,40 @@ Fade to black.
 - [ ] Set `published: true` in SUBMISSION.md frontmatter
 - [ ] Cover image: black background, white text "Your Notion workspace. Automated." — 1000×420px in Canva, 5 minutes
 - [ ] Submit before March 29
+
+---
+
+## Narration script — paste into TTS
+
+> Copy this block into ElevenLabs, Murf, or any TTS. Use a calm, confident male voice at 0.9x speed. This plays over the demo recording.
+
+---
+
+I run my entire startup alone. No team. No chief of staff. No ops person.
+
+Everything lives in Notion. My tasks, my goals, my half-finished ideas at 2am.
+
+But every morning I spend fifteen minutes just figuring out what to actually work on. Opening five databases. Piecing it together in my head. Holding it all in working memory while I try to build something.
+
+That's the tax. And it compounds.
+
+I built Chief of Staff so I never pay it again.
+
+One sentence to Claude. That's it.
+
+My entire Notion workspace becomes an interactive briefing — right inside the chat. My real tasks. My real goals. What's overdue. What needs to happen today.
+
+But here's the part that's different.
+
+These buttons don't link to Notion. They tell Claude to go fix things.
+
+Click Reschedule — Claude looks at everything overdue, picks new dates based on priority, and updates them all in Notion. You don't touch a single page.
+
+Click Plan my week — Claude generates a full task breakdown and creates every task directly in your Notion database.
+
+The briefing shows you the situation. The agent handles it.
+
+This is what a chief of staff does. You never had one. Now you do.
+
+Powered by Notion MCP.
+
