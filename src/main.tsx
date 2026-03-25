@@ -13,6 +13,27 @@ const { registry } = defineRegistry(catalog, {
   components: {
     ...shadcnComponents,
 
+    // Override shadcn Stack to always wrap and never collapse text
+    Stack: ({ props, children }: any) => {
+      const isHorizontal = props.direction === "horizontal";
+      const gapMap: Record<string, string> = { xs: "4px", sm: "8px", md: "12px", lg: "16px", xl: "24px" };
+      const gap = gapMap[props.gap] ?? "8px";
+      return (
+        <div style={{
+          display: "flex",
+          flexDirection: isHorizontal ? "row" : "column",
+          flexWrap: isHorizontal ? "wrap" : "nowrap",
+          gap,
+          alignItems: props.align ?? (isHorizontal ? "flex-start" : "stretch"),
+          justifyContent: props.justify ?? "flex-start",
+          width: "100%",
+          minWidth: 0,
+        }}>
+          {children}
+        </div>
+      );
+    },
+
     FocusCard: ({ props, emit }: any) => {
       const urgencyColor = {
         critical: "#dc2626",
