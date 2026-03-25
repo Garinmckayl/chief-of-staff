@@ -1,5 +1,5 @@
 import "./globals.css";
-import { Component, type ReactNode, useState, useCallback } from "react";
+import { Component, type ReactNode, useState, useCallback, Children } from "react";
 import { createRoot } from "react-dom/client";
 import { JSONUIProvider, Renderer, defineRegistry } from "@json-render/react";
 import { shadcnComponents } from "@json-render/shadcn";
@@ -100,7 +100,7 @@ const { registry } = defineRegistry(catalog, {
             </span>
           )}
         </div>
-        {children && children.length > 0 ? children : (
+        {Children.count(children) > 0 ? children : (
           <p style={{ fontSize: 13, color: "var(--color-text-tertiary, #71717a)", fontStyle: "italic", margin: 0 }}>
             {props.emptyMessage || "Nothing here"}
           </p>
