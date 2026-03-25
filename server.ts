@@ -72,13 +72,15 @@ async function createServer() {
       name: "chief_of_staff_briefing",
       title: "Chief of Staff Morning Briefing",
       description: `
-Render an interactive morning briefing dashboard from the user's Notion workspace.
+Render an interactive morning briefing dashboard. You MUST call this tool after get_notion_briefing_data — use the snapshot data to build the spec argument.
+
+CRITICAL: You must call this tool with a complete spec to render the UI. Do NOT respond with plain text — always call this tool.
 
 ${catalog.prompt({
   customRules: [
     "Always start with exactly one FocusCard — the single most important thing right now.",
     "Use SectionHeader to divide: Focus, Tasks, Goals, Take Action.",
-    "Overdue tasks MUST appear first in a red-themed TaskList with isOverdue=true.",
+    "Overdue tasks MUST appear first in a red-themed TaskList with isOverdue=true on each TaskRow.",
     "Include 1-3 InsightBadge components with sharp observations.",
     "GoalProgress bars show progress 0-100. Omit Goals section if no data.",
     "Keep it scannable — surface the 3 most critical tasks if there are many.",
@@ -92,8 +94,6 @@ ${catalog.prompt({
     "When the user clicks an AgentAction button, it sends a run_agent action — Claude will then call the appropriate MCP tool to do the real work in Notion.",
   ],
 })}
-
-Context: you will receive the user's Notion workspace snapshot as JSON. Use it to populate the dashboard with real data.
 `.trim(),
     },
   });
@@ -103,7 +103,7 @@ Context: you will receive the user's Notion workspace snapshot as JSON. Use it t
   // ── Tool: fetch briefing data ───────────────────────────────────────────────
   mcpServer.tool(
     "get_notion_briefing_data",
-    "Fetch live data from the user's Notion workspace to populate the Chief of Staff briefing",
+    "Fetch live data from the user's Notion workspace. ALWAYS call chief_of_staff_briefing immediately after this tool to render the interactive dashboard UI with the data returned.",
     {},
     async () => {
       if (!process.env.NOTION_API_KEY) {
