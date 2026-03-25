@@ -1,9 +1,9 @@
 import "./globals.css";
 import { Component, type ReactNode, useState, useCallback } from "react";
 import { createRoot } from "react-dom/client";
-import { App as McpApp } from "@modelcontextprotocol/ext-apps";
 import { JSONUIProvider, Renderer, defineRegistry } from "@json-render/react";
 import { shadcnComponents } from "@json-render/shadcn";
+import { useJsonRenderApp } from "@json-render/mcp/app";
 import type { Spec } from "@json-render/core";
 import { catalog } from "./catalog";
 
@@ -269,7 +269,6 @@ const { registry } = defineRegistry(catalog, {
           onClick={() => {
             setRunning(true);
             emit("press", { tool: props.agentTool, context: props.description });
-            // Optimistic: show done after 1.5s (real result comes back via Claude)
             setTimeout(() => { setRunning(false); setDone(true); }, 1500);
           }}
           style={{
@@ -320,8 +319,6 @@ const { registry } = defineRegistry(catalog, {
       if (params?.url) window.open(params.url, "_blank", "noopener");
     },
     run_agent: async (params) => {
-      // This action fires when an AgentAction button is clicked.
-      // The host (Claude) sees this event and calls the appropriate MCP tool.
       console.log("run_agent", params?.tool, params?.context);
     },
   },
@@ -344,7 +341,7 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: Error | 
   }
 }
 
-// ─── MCP App view ─────────────────────────────────────────────────────────────
+// ─── Force full width on top-level Cards ─────────────────────────────────────
 
 function forceFullWidth(spec: Spec): Spec {
   if (!spec.elements) return spec;
@@ -357,79 +354,20 @@ function forceFullWidth(spec: Spec): Spec {
   return { ...spec, elements };
 }
 
-function parseSpec(result: any): Spec | null {
-  const text = result?.content?.find((c: any) => c.type === "text")?.text;
-  if (!text) return null;
-  try { return forceFullWidth(JSON.parse(text) as Spec); } catch { return null; }
-}
-
-function applyHostContext(ctx: any) {
-  if (ctx.theme) {
-    document.documentElement.setAttribute("data-theme", ctx.theme);
-    document.documentElement.style.colorScheme = ctx.theme;
-  }
-  if (ctx.styles?.variables) {
-    for (const [k, v] of Object.entries(ctx.styles.variables)) {
-      document.documentElement.style.setProperty(k, v as string);
-    }
-  }
-}
+// ─── MCP App view ─────────────────────────────────────────────────────────────
 
 function McpAppView() {
-  const [spec, setSpec] = useState<Spec | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  // Handle action events from the rendered UI
-  const handleAction = useCallback(({ action, taskId, url }: any) => {
-    if (action === "open_notion" && url) {
-      window.open(url, "_blank", "noopener");
-    }
-    // complete_task and other actions are sent back to the MCP server
-    // via the app.callTool mechanism — for the demo we just show feedback visually
-  }, []);
-
-  // Connect to MCP host
-  import("@modelcontextprotocol/ext-apps").then(({ App: McpApp2 }) => {
-    const app = new McpApp2({ name: "chief-of-staff", version: "1.0.0" });
-
-    app.ontoolresult = (result: any) => {
-      const parsed = parseSpec(result);
-      if (parsed) setSpec(parsed);
-    };
-
-    app.onhostcontextchanged = (ctx: any) => applyHostContext(ctx);
-
-    app.onerror = (err: any) => setError(err instanceof Error ? err.message : String(err));
-
-    app.connect()
-      .then(() => {
-        const ctx = app.getHostContext?.();
-        if (ctx) applyHostContext(ctx);
-        else {
-          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
-          document.documentElement.setAttribute("data-theme", prefersDark ? "dark" : "light");
-          document.documentElement.style.colorScheme = prefersDark ? "dark" : "light";
-        }
-      })
-      .catch((err: any) => setError(String(err)));
-
-    // Also listen for Cursor-style postMessage
-    window.addEventListener("message", (event: MessageEvent) => {
-      const data = event.data as any;
-      if (!data || typeof data !== "object") return;
-      if (data.method === "ui/notifications/tool-input" && data.params?.arguments) {
-        const raw = data.params.arguments.spec;
-        if (raw && typeof raw === "object" && "root" in raw && "elements" in raw) {
-          setSpec(forceFullWidth(raw as Spec));
-        }
-      }
-    });
+  const { spec: rawSpec, connecting, error } = useJsonRenderApp({
+    name: "chief-of-staff",
+    version: "1.0.0",
   });
+
+  const spec = rawSpec ? forceFullWidth(rawSpec) : null;
 
   if (error) {
     return (
       <div style={{ padding: 16, color: "#dc2626", fontFamily: "monospace", fontSize: 13 }}>
-        {error}
+        Error: {error.message}
       </div>
     );
   }
@@ -438,7 +376,7 @@ function McpAppView() {
     return (
       <div style={{ padding: 32, color: "#71717a", fontFamily: "sans-serif", fontSize: 14, textAlign: "center" }}>
         <p style={{ fontSize: 20, marginBottom: 8 }}>🧑‍💼</p>
-        <p>Chief of Staff is ready.</p>
+        <p>{connecting ? "Connecting…" : "Chief of Staff is ready."}</p>
         <p style={{ fontSize: 12, marginTop: 4 }}>Ask Claude: <em>"Give me my morning briefing"</em></p>
       </div>
     );

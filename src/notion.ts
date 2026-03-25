@@ -182,8 +182,12 @@ export async function fetchWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
     const hasDue = propNames.some((p) => p.includes("due") || p.includes("deadline") || p.includes("date"));
     const hasProgress = propNames.some((p) => p.includes("progress") || p.includes("percent"));
 
-    if (hasStatus || hasDue) taskDbs.push({ id: db.id, name: title });
-    if (hasProgress) goalDbs.push({ id: db.id, name: title });
+    // A DB with a progress/percent field is a goal DB — don't treat it as tasks
+    if (hasProgress) {
+      goalDbs.push({ id: db.id, name: title });
+    } else if (hasStatus || hasDue) {
+      taskDbs.push({ id: db.id, name: title });
+    }
   }
 
   // Query task databases
@@ -235,19 +239,50 @@ export async function fetchWorkspaceSnapshot(): Promise<WorkspaceSnapshot> {
 }
 
 export async function completeTask(taskId: string): Promise<void> {
+  // Read the page first to find the correct Status property type
+  let page: any;
   try {
-    await notionPatch(`/pages/${taskId}`, {
-      properties: { Status: { status: { name: "Done" } } },
-    });
+    page = await notionFetch(`/pages/${taskId}`);
   } catch {
-    try {
-      await notionPatch(`/pages/${taskId}`, {
-        properties: { Done: { checkbox: true } },
-      });
-    } catch {
-      await notionPatch(`/pages/${taskId}`, { archived: true });
+    return;
+  }
+
+  const props = page.properties ?? {};
+  // Find the status key and its type
+  for (const key of Object.keys(props)) {
+    const prop = props[key];
+    const k = key.toLowerCase();
+    if (prop.type === "status") {
+      // Notion native status type
+      try {
+        await notionPatch(`/pages/${taskId}`, {
+          properties: { [key]: { status: { name: "Done" } } },
+        });
+        return;
+      } catch { /* try next */ }
+    }
+    if (prop.type === "select" && k.includes("status")) {
+      // select field — try common done names
+      for (const doneName of ["Done", "Complete", "Completed", "Closed"]) {
+        try {
+          await notionPatch(`/pages/${taskId}`, {
+            properties: { [key]: { select: { name: doneName } } },
+          });
+          return;
+        } catch { /* try next */ }
+      }
+    }
+    if (prop.type === "checkbox" && (k === "done" || k.includes("complet"))) {
+      try {
+        await notionPatch(`/pages/${taskId}`, {
+          properties: { [key]: { checkbox: true } },
+        });
+        return;
+      } catch { /* try next */ }
     }
   }
+  // Last resort: archive
+  await notionPatch(`/pages/${taskId}`, { archived: true });
 }
 
 // ─── Agentic write operations ─────────────────────────────────────────────────
