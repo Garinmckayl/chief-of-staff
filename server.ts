@@ -76,14 +76,21 @@ Render an interactive morning briefing dashboard. You MUST call this tool after 
 
 CRITICAL: You must call this tool with a complete spec to render the UI. Do NOT respond with plain text — always call this tool.
 
+CRITICAL FOR TASKS: Every task that appears in a TaskList MUST have its own TaskRow element defined in the elements map AND listed in the TaskList's children array. If you reference "task-1" in children, you MUST output an element with key "task-1". Missing child elements are invisible. Generate one TaskRow per task — do not skip them.
+
+Example of correct TaskList structure:
+  TaskList element: { "type": "TaskList", "props": { "heading": "Overdue", "count": 2 }, "children": ["task-overdue-1", "task-overdue-2"] }
+  MUST also have: { "type": "TaskRow", "props": { "id": "<notion-id>", "title": "Fix payment bug", "isOverdue": true, "dueDate": "2026-03-17", "priority": "high", "status": "Not started", "notionUrl": null } }
+  AND: { "type": "TaskRow", "props": { "id": "<notion-id>", "title": "Send investor email", "isOverdue": true, "dueDate": "2026-03-16", "priority": "high", "status": "In progress", "notionUrl": null } }
+
 ${catalog.prompt({
   customRules: [
     "Always start with exactly one FocusCard — the single most important thing right now.",
     "Use SectionHeader to divide: Focus, Tasks, Goals, Take Action.",
     "Overdue tasks MUST appear first in a red-themed TaskList with isOverdue=true on each TaskRow.",
+    "For EVERY task in the snapshot data, output a TaskRow element AND include it in the TaskList children array. Never reference a child key without defining that element.",
     "Include 1-3 InsightBadge components with sharp observations.",
     "GoalProgress bars show progress 0-100. Omit Goals section if no data.",
-    "Keep it scannable — surface the 3 most critical tasks if there are many.",
     "Tone: calm, direct, like a trusted chief of staff.",
     "ALWAYS include a 'Take Action' SectionHeader at the bottom followed by 2-3 AgentAction buttons.",
     "AgentAction buttons should reflect what actually needs doing. Examples:",
@@ -91,7 +98,6 @@ ${catalog.prompt({
     "  - If it's Friday or there are many done tasks: AgentAction with agentTool='write_weekly_review', label='Write weekly review', emoji='📋'",
     "  - If a goal has no tasks: AgentAction with agentTool='break_down_goal', label='Break down stalled goal', emoji='🎯'",
     "  - Always include: AgentAction with agentTool='create_notion_tasks', label='Plan my week', emoji='⚡', variant='primary'",
-    "When the user clicks an AgentAction button, it sends a run_agent action — Claude will then call the appropriate MCP tool to do the real work in Notion.",
   ],
 })}
 `.trim(),
