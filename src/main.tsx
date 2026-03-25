@@ -25,33 +25,31 @@ const { registry } = defineRegistry(catalog, {
           borderLeft: `4px solid ${urgencyColor}`,
           background: "var(--color-background-secondary, #18181b)",
           borderRadius: 12,
-          padding: "14px 16px",
+          padding: "16px 20px",
           marginBottom: 16,
-          boxSizing: "border-box",
-          width: "100%",
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 16 }}>🎯</span>
-            <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: urgencyColor }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 18 }}>🎯</span>
+            <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: urgencyColor }}>
               Focus Now
             </span>
           </div>
-          <p style={{ fontSize: 15, fontWeight: 700, color: "var(--color-text-primary, #fff)", margin: "0 0 5px", lineHeight: 1.3, wordBreak: "break-word" }}>
+          <p style={{ fontSize: 18, fontWeight: 700, color: "var(--color-text-primary, #fff)", margin: "0 0 6px", wordBreak: "break-word" }}>
             {props.title}
           </p>
-          <p style={{ fontSize: 12, color: "var(--color-text-secondary, #a1a1aa)", margin: "0 0 10px", lineHeight: 1.5, wordBreak: "break-word" }}>
+          <p style={{ fontSize: 13, color: "var(--color-text-secondary, #a1a1aa)", margin: "0 0 12px", wordBreak: "break-word" }}>
             {props.why}
           </p>
           {props.notionUrl && (
             <button
               onClick={() => emit("press", { action: "open_notion", url: props.notionUrl })}
               style={{
-                fontSize: 11,
+                fontSize: 12,
                 color: urgencyColor,
                 background: "transparent",
                 border: `1px solid ${urgencyColor}40`,
                 borderRadius: 6,
-                padding: "3px 8px",
+                padding: "4px 10px",
                 cursor: "pointer",
               }}
             >
@@ -63,18 +61,18 @@ const { registry } = defineRegistry(catalog, {
     },
 
     TaskList: ({ props, children }: any) => (
-      <div style={{ marginBottom: 16, width: "100%", boxSizing: "border-box" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, flexWrap: "wrap" }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "var(--color-text-primary, #fff)" }}>
+      <div style={{ marginBottom: 20 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: "var(--color-text-primary, #fff)" }}>
             {props.heading}
           </span>
           {props.count !== null && props.count > 0 && (
             <span style={{
-              fontSize: 10,
+              fontSize: 11,
               background: "var(--color-background-secondary, #27272a)",
               color: "var(--color-text-secondary, #a1a1aa)",
               borderRadius: 10,
-              padding: "1px 6px",
+              padding: "1px 7px",
               fontWeight: 600,
             }}>
               {props.count}
@@ -82,7 +80,7 @@ const { registry } = defineRegistry(catalog, {
           )}
         </div>
         {children && children.length > 0 ? children : (
-          <p style={{ fontSize: 12, color: "var(--color-text-tertiary, #71717a)", fontStyle: "italic", margin: 0 }}>
+          <p style={{ fontSize: 13, color: "var(--color-text-tertiary, #71717a)", fontStyle: "italic", margin: 0 }}>
             {props.emptyMessage || "Nothing here"}
           </p>
         )}
@@ -103,13 +101,10 @@ const { registry } = defineRegistry(catalog, {
         <div style={{
           display: "flex",
           alignItems: "center",
-          gap: 8,
-          padding: "7px 10px",
-          borderRadius: 7,
+          gap: 10,
+          padding: "8px 12px",
+          borderRadius: 8,
           marginBottom: 4,
-          boxSizing: "border-box",
-          width: "100%",
-          minWidth: 0,
           background: overdue
             ? "rgba(220,38,38,0.08)"
             : "var(--color-background-secondary, #18181b)",
@@ -118,10 +113,10 @@ const { registry } = defineRegistry(catalog, {
           <button
             onClick={handleComplete}
             style={{
-              width: 16,
-              height: 16,
-              minWidth: 16,
-              borderRadius: 3,
+              width: 18,
+              height: 18,
+              minWidth: 18,
+              borderRadius: 4,
               border: `2px solid ${overdue ? "#dc2626" : "var(--color-border, #3f3f46)"}`,
               background: "transparent",
               cursor: "pointer",
@@ -129,20 +124,18 @@ const { registry } = defineRegistry(catalog, {
             }}
             aria-label="Complete task"
           />
-          <div style={{ flex: 1, minWidth: 0, overflow: "hidden" }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <p style={{
-              fontSize: 12,
+              fontSize: 13,
               fontWeight: 500,
               color: "var(--color-text-primary, #fff)",
               margin: 0,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
+              wordBreak: "break-word",
             }}>
               {props.title}
             </p>
             {(props.dueDate || props.status) && (
-              <p style={{ fontSize: 10, color: overdue ? "#dc2626" : "var(--color-text-tertiary, #71717a)", margin: "1px 0 0", whiteSpace: "nowrap" }}>
+              <p style={{ fontSize: 11, color: overdue ? "#dc2626" : "var(--color-text-tertiary, #71717a)", margin: "2px 0 0" }}>
                 {overdue ? "⚠ Overdue" : props.dueDate ? `Due ${props.dueDate}` : ""}{props.status ? ` · ${props.status}` : ""}
               </p>
             )}
@@ -156,9 +149,8 @@ const { registry } = defineRegistry(catalog, {
                 background: "transparent",
                 border: "none",
                 cursor: "pointer",
-                padding: "2px 2px",
+                padding: "2px 4px",
                 flexShrink: 0,
-                lineHeight: 1,
               }}
             >
               ↗
@@ -173,23 +165,21 @@ const { registry } = defineRegistry(catalog, {
       const color = pct >= 80 ? "#22c55e" : pct >= 40 ? "#f97316" : "#a1a1aa";
       return (
         <div style={{
-          padding: "10px 12px",
+          padding: "10px 14px",
           borderRadius: 8,
           background: "var(--color-background-secondary, #18181b)",
           border: "1px solid var(--color-border, #27272a)",
           marginBottom: 8,
-          boxSizing: "border-box",
-          width: "100%",
         }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 12, fontWeight: 500, color: "var(--color-text-primary, #fff)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6, gap: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-primary, #fff)", wordBreak: "break-word", flex: 1 }}>
               {props.title}
             </span>
-            <span style={{ fontSize: 11, fontWeight: 700, color, flexShrink: 0 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color, flexShrink: 0 }}>
               {pct}%
             </span>
           </div>
-          <div style={{ height: 4, background: "var(--color-background-tertiary, #27272a)", borderRadius: 2, width: "100%" }}>
+          <div style={{ height: 4, background: "var(--color-background-tertiary, #27272a)", borderRadius: 2 }}>
             <div style={{ height: 4, width: `${pct}%`, background: color, borderRadius: 2, transition: "width 0.5s ease" }} />
           </div>
           {props.notionUrl && (
@@ -216,31 +206,29 @@ const { registry } = defineRegistry(catalog, {
         <div style={{
           display: "inline-flex",
           alignItems: "center",
-          gap: 5,
-          padding: "4px 9px",
+          gap: 6,
+          padding: "5px 10px",
           borderRadius: 20,
           background: typeStyle.bg,
           border: `1px solid ${typeStyle.border}`,
           marginBottom: 6,
           marginRight: 6,
-          maxWidth: "100%",
-          boxSizing: "border-box",
         }}>
-          <span style={{ fontSize: 11, flexShrink: 0 }}>{typeStyle.icon}</span>
-          <span style={{ fontSize: 11, color: typeStyle.color, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{props.text}</span>
+          <span style={{ fontSize: 12 }}>{typeStyle.icon}</span>
+          <span style={{ fontSize: 12, color: typeStyle.color, wordBreak: "break-word" }}>{props.text}</span>
         </div>
       );
     },
 
     SectionHeader: ({ props }: any) => (
-      <div style={{ display: "flex", alignItems: "flex-start", gap: 7, marginTop: 18, marginBottom: 10, flexWrap: "wrap" }}>
-        {props.emoji && <span style={{ fontSize: 14, marginTop: 1 }}>{props.emoji}</span>}
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <h2 style={{ fontSize: 13, fontWeight: 700, color: "var(--color-text-primary, #fff)", margin: 0, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 20, marginBottom: 12 }}>
+        {props.emoji && <span style={{ fontSize: 16 }}>{props.emoji}</span>}
+        <div>
+          <h2 style={{ fontSize: 15, fontWeight: 700, color: "var(--color-text-primary, #fff)", margin: 0, wordBreak: "break-word" }}>
             {props.title}
           </h2>
           {props.subtitle && (
-            <p style={{ fontSize: 11, color: "var(--color-text-secondary, #a1a1aa)", margin: "1px 0 0", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+            <p style={{ fontSize: 12, color: "var(--color-text-secondary, #a1a1aa)", margin: "2px 0 0", wordBreak: "break-word" }}>
               {props.subtitle}
             </p>
           )}
@@ -252,16 +240,14 @@ const { registry } = defineRegistry(catalog, {
       <button
         onClick={() => emit("press", { action: props.action, taskId: props.taskId, url: props.url })}
         style={{
-          padding: "7px 14px",
+          padding: "8px 16px",
           borderRadius: 8,
           background: "var(--color-background-secondary, #27272a)",
           border: "1px solid var(--color-border, #3f3f46)",
           color: "var(--color-text-primary, #fff)",
-          fontSize: 12,
+          fontSize: 13,
           cursor: "pointer",
           fontWeight: 500,
-          maxWidth: "100%",
-          boxSizing: "border-box",
         }}
       >
         {props.label}
@@ -285,10 +271,9 @@ const { registry } = defineRegistry(catalog, {
           style={{
             display: "flex",
             alignItems: "flex-start",
-            gap: 10,
+            gap: 12,
             width: "100%",
-            boxSizing: "border-box",
-            padding: "10px 12px",
+            padding: "12px 16px",
             borderRadius: 10,
             background: done
               ? "rgba(34,197,94,0.08)"
@@ -297,7 +282,7 @@ const { registry } = defineRegistry(catalog, {
               : "var(--color-background-secondary, #18181b)",
             border: `1px solid ${done ? "rgba(34,197,94,0.3)" : isPrimary ? "rgba(99,102,241,0.4)" : "var(--color-border, #27272a)"}`,
             color: "var(--color-text-primary, #fff)",
-            fontSize: 12,
+            fontSize: 13,
             cursor: done || running ? "default" : "pointer",
             fontWeight: 500,
             textAlign: "left",
@@ -306,15 +291,15 @@ const { registry } = defineRegistry(catalog, {
             transition: "all 0.2s",
           }}
         >
-          <span style={{ fontSize: 16, flexShrink: 0, marginTop: 1 }}>
+          <span style={{ fontSize: 18, flexShrink: 0 }}>
             {done ? "✅" : running ? "⏳" : (props.emoji || "⚡")}
           </span>
           <div style={{ minWidth: 0, flex: 1 }}>
-            <p style={{ margin: 0, fontWeight: 600, fontSize: 12, color: done ? "#4ade80" : isPrimary ? "#a5b4fc" : "var(--color-text-primary, #fff)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <p style={{ margin: 0, fontWeight: 600, color: done ? "#4ade80" : isPrimary ? "#a5b4fc" : "var(--color-text-primary, #fff)", wordBreak: "break-word" }}>
               {done ? "Done — check Notion" : running ? "Working…" : props.label}
             </p>
             {!done && !running && (
-              <p style={{ margin: "2px 0 0", fontSize: 10, color: "var(--color-text-secondary, #a1a1aa)", fontWeight: 400, lineHeight: 1.4, wordBreak: "break-word" }}>
+              <p style={{ margin: "2px 0 0", fontSize: 11, color: "var(--color-text-secondary, #a1a1aa)", fontWeight: 400, wordBreak: "break-word" }}>
                 {props.description}
               </p>
             )}
@@ -401,14 +386,7 @@ function McpAppView() {
     >
       <div
         className="w-full"
-        style={{
-          padding: "12px 14px",
-          fontFamily: "sans-serif",
-          boxSizing: "border-box",
-          width: "100%",
-          maxWidth: "100%",
-          overflowX: "hidden",
-        }}
+        style={{ padding: 16, fontFamily: "sans-serif" }}
       >
         <Renderer spec={spec} registry={registry} />
       </div>
